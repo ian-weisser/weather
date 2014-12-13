@@ -108,7 +108,7 @@ class Radar(dict):
 
     def csv(self):
         """ Output the dict as a CSV """
-        with open(DIR + '/csv/radar.csv', 'w') as csvfile:
+        with open(DIR + '/radar.csv', 'w') as csvfile:
             # Add URL field, if desired
             # Add Elevation field, if desired
             fieldnames = ['Name', 'Location',  'Latitude', 'Longitude' ]
@@ -218,7 +218,7 @@ class Metar(dict):
 
     def csv(self):
         """ Output the dict as a CSV """
-        with open(DIR + '/csv/metar.csv', 'w') as csvfile:
+        with open(DIR + '/metar.csv', 'w') as csvfile:
             # Add other fields, if desired
             fieldnames = ['Name', 'Location',  'Latitude', 'Longitude' ]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames,
@@ -331,7 +331,7 @@ class Zones(dict):
 
     def csv(self):
         """ Output the dict as a CSV """
-        with open(DIR + '/csv/zone.csv', 'w') as csvfile:
+        with open(DIR + '/zone.csv', 'w') as csvfile:
             # Add other fields, if desired
             fieldnames = ['Zone', 'Zone_Name', 'County',
                           'Latitude', 'Longitude' ]
@@ -376,7 +376,6 @@ def run():
         print("Updating US radar lookup table")
         radar.parse_nws()
         radar.csv()
-        radar.dbm()
 
     else:
         print("WARNING: Server status: {}".format(radar.status))
@@ -391,7 +390,6 @@ def run():
         print("Updating METAR lookup table")
         metar.parse()
         metar.csv()
-        metar.dbm()
     else:
         print("WARNING: Server status: {}".format(metar.status))
 
@@ -400,7 +398,7 @@ def run():
     zone_followup = False
     zone = Zones()
     if zone.index_status == '304' \
-    and os.path.exists(DIR + '/csv/zone.csv'):
+    and os.path.exists(DIR + '/zone.csv'):
         print("Zone information has not changed")
     elif zone.index_status in ['200', '304']:
         zone_followup = True
@@ -417,7 +415,6 @@ def run():
             print("Updating Forecast/Alert Zone lookup table")
             zone.parse_nws_zones()
             zone.csv()
-            zone.dbm()
         else:
             print("WARNING: Server status: {}".format(zone.data_status))
 
