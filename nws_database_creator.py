@@ -41,14 +41,12 @@ This software is freely redistributable under the terms of the GPLv3 license.
 """
 
 # Python Standard Library (Debian package libpython3.*-minimal)
-import io
 import os
 
 # Python Standard Library (Debian package libpython3.*-stdlib)
 import csv
 import datetime
 #import dbm.gnu
-import zipfile
 
 # Other Python packages
 import httplib2      # (Debian package python3-httplib2)
@@ -58,7 +56,7 @@ import httplib2      # (Debian package python3-httplib2)
 
 DIR    = os.path.expanduser('~') + '/uploads/data'
 CACHE  = '/tmp/weather'
-SOURCE = { 'Radar' : 'http://www.ncdc.noaa.gov/oa/radar/nexrad.kmz',
+SOURCE = { 'Radar' : 'http://www.ncdc.noaa.gov/homr/file/nexrad-stations.txt',
            'Metar' : 'http://weather.noaa.gov/data/nsd_cccc.txt',
            'Zones' :
                'http://www.nws.noaa.gov/geodata/catalog/wsom/html/cntyzone.htm'
@@ -69,8 +67,8 @@ SOURCE = { 'Radar' : 'http://www.ncdc.noaa.gov/oa/radar/nexrad.kmz',
 class Radar(dict):
     """
     Download, process, and save radar station data
-    - Download the radar kml
-    - Parse the radar kml into a dict
+    - Download the radar station table
+    - Parse the radar station table into a dict
     - Output the dict into a csv file
     - (optional) Output the dict into a dbm file
     """
@@ -86,22 +84,54 @@ class Radar(dict):
         get                = httplib2.Http(CACHE)
         resp, content      = get.request(SOURCE['Radar'], "GET")
         self.status        = resp['status']
-        zip_obj            = zipfile.ZipFile(io.BytesIO(content))
-        self.content       = zip_obj.read('doc.kml').decode('utf-8')
+        self.content       = content.decode('utf-8')
 
     def parse_nws(self):
-        """ Parse the NWS KML file with radar information """
-        stations = self.content.split('<description>')[1:]
-        for station in stations:
-            sta  = station.split('</description>')[0].split('<BR>')
-            name = sta[0][14:].strip()
+        """
+        Parse the NWS radar station file
+        First, parse the header to determine field widths and column name
+        Then parse the body into a dict
+        """
+        stations = self.content.split('\r\n')[:-1]
+
+        column_metadata = []
+        line1 = stations[0]                  # COLUMN NAMES
+        line2 = stations[1]                  # ------ -----
+        for col in range(0, len(line1), 1):
+            if col == 0:
+                start = 0
+            elif line2[col] == '-':
+                continue
+            else:  # line2[col] == ' '
+                name = line1[start:col].strip()
+                column_metadata.append((name, start, col)) # Append a tuple
+                start = col                                # Reset start
+
+        for one_radar_line in stations[2:]:   # Lines 0 and 1 are header
+            if one_radar_line == '':          # Blank CR/LF at EOF
+                continue
+            one_radar = {}
+            for field in column_metadata:
+                col_name            = field[0]
+                col_start           = field[1]
+                col_end             = field[2]
+                field_data          = one_radar_line[col_start:col_end].strip()
+                one_radar[col_name] = field_data
+
+            name                    = one_radar['ICAO']
             self[name]              = {}
             self[name]['Name']      = name
-            self[name]['Location']  = sta[1][9:].strip()
-            self[name]['Latitude']  = sta[2][9:].strip()
-            self[name]['Longitude'] = sta[3][10:].strip()
-            #self[name]['Elevation'] = sta[4][10:].strip()
-            #self[name]['URL']       = sta[7].split('"')[1].strip()
+            if len(one_radar['ST']) > 0:
+                self[name]['Location'] = (one_radar['NAME'] + ' ' +
+                                         one_radar['ST'])
+            else:
+                self[name]['Location'] = (one_radar['NAME'] + ' ' +
+                                         one_radar['COUNTRY'])
+            self[name]['Latitude']  = one_radar['LAT']
+            self[name]['Longitude'] = one_radar['LON']
+            self[name]['Elevation'] = one_radar['ELEV']
+            self[name]['URL']       = \
+                'http://www.ncdc.noaa.gov/nexradinv/chooseday.jsp?id=' + name
 
             # URL can be generated, too. Merely add the name to the id:
             # http://www.ncdc.noaa.gov/nexradinv/chooseday.jsp?id=PAEC
@@ -161,35 +191,6 @@ class Metar(dict):
         self.status   = resp['status']
         self.content  = content.decode('utf-8')
 
-    def dms_to_dec(self, dms_string, spacer='-'):
-        """Simple conversion from dd-mm-ssW to -dd.xxx"""
-        dms = dms_string[:-1].split(spacer)
-
-        # Degrees
-        degrees = int(dms[0])
-
-        # Minutes and Seconds
-        if len(dms) > 1:
-            minutes = float(dms[1])
-            minsec = minutes / 60
-
-        if len(dms) > 2:
-            seconds = float(dms[2])
-            minsec = minsec + (seconds / 3600)
-
-        # Truncating
-        minsec = str(minsec)[2:5]
-
-        # Change S and W to negative
-        if dms_string[-1:] in ['S', 'W']:
-            sign = '-'
-        else:
-            sign = ''
-
-        result = "{}{}.{}".format(sign, degrees, minsec)
-        return result
-
-
     def parse(self):
         """
         Parse the NWS METAR file
@@ -206,9 +207,9 @@ class Metar(dict):
             #self[icao]['State']        = station.split(';')[4].strip()
             #self[icao]['Country']      = station.split(';')[5].strip()
             #self[icao]['WMO_Region']   = station.split(';')[6].strip()
-            self[icao]['Latitude']     = self.dms_to_dec(
+            self[icao]['Latitude']     = dms_to_dec(
                                            station.split(';')[7].strip())
-            self[icao]['Longitude']    = self.dms_to_dec(
+            self[icao]['Longitude']    = dms_to_dec(
                                            station.split(';')[8].strip())
             #self[icao]['Upper_Lat']     = station.split(';')[9].strip()
             #self[icao]['Upper_Lon']     = station.split(';')[10].strip()
@@ -255,58 +256,55 @@ class Zones(dict):
     def __init__(self):
         """ Create the dict, download and unzip the data """
         super(Zones, self).__init__()
-        self.index_status  = 0
+        self.status  = 0
+        self.data_status   = 0
         self.data_url      = ''
         self.content       = ''
-        self.index_status   = self.download(SOURCE['Zones'])
-
+        self.download(SOURCE['Zones'])
+        self.index_status = self.status
+        self.status = 0
 
     def download(self, url):
         """
         Download the index web page to determine the zone file URL
         """
-        get           = httplib2.Http(CACHE)
-        resp, content = get.request(url, "GET")
-        self.content  = content.decode('utf-8')
-        return resp['status']
+        get               = httplib2.Http(CACHE)
+        resp, content     = get.request(url, "GET")
+        self.status       = resp['status']
+        self.content      = content.decode('utf-8')
 
 
     def parse_nws_index(self):
         """
         Locate the current zone file, listed on the index page
         Several may be listed - parse the html to determine the dates of each
-        possible file. Figure out which file is the most recent (but not future)
+        possible file.
+        Figure out which file is the most recent (but not future)
         """
-
-        # Find the appropriate table within the web page
-        text    = self.content.split(
-            'County-Public Forecast Zones Correlation file (CONUS/OCONUS)')[1]
-        text    = text.split('</table>')[0]
-        lines   = text.split('<tr>')[1:]
-
-        # Parse the table into a dict of date:url possibles
-        possible_files = {}
+        possible_files = []
+        lines = self.content.split('<B>Download Text File bp')[:-1]
         for line in lines:
-            date_txt = line.split('<td>')[1].split('</TD>')[0].strip()
-            date     = datetime.datetime.strptime(date_txt, "%d %B %Y")
-            url_stub = line.split('<TD>')[1].split('"')[1][2:]
-            url      = SOURCE['Zones'][0:-18] + url_stub
-            possible_files[date] = url
+            date_string = line[-67:-48].lstrip(' <td>')
+            date        = datetime.datetime.strptime(date_string, "%d %B %Y")
+            url_stub    = line[-20:-2]
+            url         = SOURCE['Zones'][0:-18] + url_stub
+            possible_files.append({date:url})
 
         # Figure out which date is most recent in the past
-        today        = datetime.datetime.today()
-        current_file = None
-        for date in possible_files.keys():
-            if date > today:
-                continue
-            elif current_file == None:
-                current_file = date
-                continue
-            elif date > current_file:
-                date = current_file
-
-        # Return the corresponding URL
-        self.data_url = possible_files[current_file]
+        if len(possible_files) == 0:
+            self.index_status = 0
+        elif len(possible_files) == 1:
+            self.data_url = list(possible_files.values())[0]
+        else:
+            today                  = datetime.datetime.today().timestamp()
+            smallest_timedelta     = 10000000000
+            smallest_timedelta_url = ''
+            for possible in possible_files:
+                date = list(possible.keys())[0].timestamp()
+                if today - date < smallest_timedelta:
+                    smallest_timedelta     = today - date
+                    smallest_timedelta_url = list(possible.values())[0]
+            self.data_url = smallest_timedelta_url
 
 
     def parse_nws_zones(self):
@@ -360,6 +358,35 @@ class Zones(dict):
 
 
 
+def dms_to_dec(dms_string, spacer='-'):
+    """Simple conversion from dd-mm-ssW to -dd.xxx"""
+    dms = dms_string[:-1].split(spacer)
+
+    # Degrees
+    degrees = int(dms[0])
+
+    # Minutes and Seconds
+    if len(dms) > 1:
+        minutes = float(dms[1])
+        minsec = minutes / 60
+
+    if len(dms) > 2:
+        seconds = float(dms[2])
+        minsec = minsec + (seconds / 3600)
+
+    # Truncating
+    minsec = str(minsec)[2:5]
+
+    # Change S and W to negative
+    if dms_string[-1:] in ['S', 'W']:
+        sign = '-'
+    else:
+        sign = ''
+
+    result = "{}{}.{}".format(sign, degrees, minsec)
+    return result
+
+
 
 def run():
     """
@@ -376,7 +403,6 @@ def run():
         print("Updating US radar lookup table")
         radar.parse_nws()
         radar.csv()
-
     else:
         print("WARNING: Server status: {}".format(radar.status))
 
@@ -395,19 +421,15 @@ def run():
 
 
     print("Checking Forcast/Alert Zone data...")
-    zone_followup = False
     zone = Zones()
     if zone.index_status == '304' \
     and os.path.exists(DIR + '/zone.csv'):
         print("Zone information has not changed")
     elif zone.index_status in ['200', '304']:
-        zone_followup = True
-    else:
-        print("WARNING: Server status: {}".format(zone.index_status))
-
-    if zone_followup:
         zone.parse_nws_index()
-        zone.data_status = zone.download(zone.data_url)
+        zone.download(zone.data_url)
+        zone.data_status = zone.status
+        zone.status = 0
         if zone.data_status == '304' \
         and os.path.exists(DIR + '/csv/zone.csv'):
             print("Zone information has not changed")
@@ -417,7 +439,8 @@ def run():
             zone.csv()
         else:
             print("WARNING: Server status: {}".format(zone.data_status))
-
+    else:
+        print("WARNING: Server status: {}".format(zone.index_status))
 
     print("End of run")
 
