@@ -288,7 +288,7 @@ class Zones(dict):
                 date_str = line.split('</td>')[0].split('<td>')[1].strip()
                 date     = datetime.datetime.strptime(date_str, "%d %B %Y")
                 url_stub = line.split('</td>')[1].split('"')[1].strip('.')
-                url      = SOURCE['Zones'][0:-18] + url_stub
+                url      = SOURCE['Zones'][0:-18] + url_stub[0:-3] + 'txt'
                 possible_files.append({date:url})
 
         # Figure out which date is most recent in the past
@@ -296,8 +296,7 @@ class Zones(dict):
             self.index_status = 0
         elif len(possible_files) == 1:
             possible = possible_files[0]
-            self.data_url = possible.values()[0]
-            print(self.data_url)
+            self.data_url = list(possible.values())[0]
         else:
             today                  = datetime.datetime.today().timestamp()
             smallest_timedelta     = 10000000000
