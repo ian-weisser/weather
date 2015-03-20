@@ -282,19 +282,22 @@ class Zones(dict):
         Figure out which file is the most recent (but not future)
         """
         possible_files = []
-        lines = self.content.split('<B>Download Text File bp')[:-1]
+        lines = self.content.lower().split('tr>')
         for line in lines:
-            date_string = line[-67:-48].lstrip(' <td>')
-            date        = datetime.datetime.strptime(date_string, "%d %B %Y")
-            url_stub    = line[-20:-2]
-            url         = SOURCE['Zones'][0:-18] + url_stub
-            possible_files.append({date:url})
+            if "download text file bp" in line:
+                date_str = line.split('</td>')[0].split('<td>')[1].strip()
+                date     = datetime.datetime.strptime(date_str, "%d %B %Y")
+                url_stub = line.split('</td>')[1].split('"')[1].strip('.')
+                url      = SOURCE['Zones'][0:-18] + url_stub
+                possible_files.append({date:url})
 
         # Figure out which date is most recent in the past
         if len(possible_files) == 0:
             self.index_status = 0
         elif len(possible_files) == 1:
-            self.data_url = list(possible_files.values())[0]
+            possible = possible_files[0]
+            self.data_url = possible.values()[0]
+            print(self.data_url)
         else:
             today                  = datetime.datetime.today().timestamp()
             smallest_timedelta     = 10000000000
