@@ -84,6 +84,8 @@ def best(many_locations):
     closest_dist = 100000
     closest_sta  = {}
     for loc in many_locations:
+        if loc['Latitude'] == '' or loc['Longitude'] == '':
+            continue
         lat = float(loc['Latitude'])
         lon = float(loc['Longitude'])
 
@@ -108,7 +110,7 @@ def best(many_locations):
 def run():
     """ Example application """
     output  = {}
-    os.getcwd()
+    working = os.getcwd()
     with open(working + '/radar.csv', 'r') as csvfile:
         radars = csv.DictReader(csvfile)
         output['Radar'] = best(radars)
