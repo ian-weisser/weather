@@ -16,8 +16,11 @@ How to use this application:
 5) Run the script: python3 me.py
 
 """
-import csv
+# Python Standard Library (Debian package libpython3.*-minimal)
 import os
+
+# Python Standard Library (Debian package libpython3.*-stdlib)
+import csv
 import math
 
 
