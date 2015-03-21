@@ -5,27 +5,46 @@ Example Application
 Given a location, use the weather database to determine the best observation
 station, forecast zone, and radar location.
 
-How to use this application:
-1) Create a temporary working directory: /tmp/working
-2) Set it as the current working directory: cd /tmp/working
-3) Make sure this file is in that directory: mv /someplace/me.py /tmp/working/
-4) Download the metar, radar, and zone files to that directory:
-    wget https://raw.githubusercontent.com/ian-weisser/data/master/metar.csv
-    wget https://raw.githubusercontent.com/ian-weisser/data/master/radar.csv
-    wget https://raw.githubusercontent.com/ian-weisser/data/master/zone.csv
-5) Run the script: python3 me.py
+Download the waether location database each run. Use httplib2 for caching.
 
+Script usage: python3 closest_weather_location.py
 """
 # Python Standard Library (Debian package libpython3.*-minimal)
-import os
+import io
 
 # Python Standard Library (Debian package libpython3.*-stdlib)
 import csv
 import math
 
+# Other Python packages
+import httplib2      # (Debian package python3-httplib2)
+
 
 LATITUDE  = 43.01
 LONGITUDE = -87.99
+
+def download(dl_type):
+    """ Download data tables """
+    cache    = '/tmp/weather'
+    url      = 'https://raw.githubusercontent.com/ian-weisser/data/master/'
+    if dl_type   == 'metar':
+        source = url + 'metar.csv'
+    elif dl_type == 'radar':
+        source = url + 'radar.csv'
+    elif dl_type == 'zone':
+        source = url + 'zone.csv'
+    else:
+        return
+
+    get           = httplib2.Http(cache)
+    #resp, content = get.request(source, "GET")
+    #status        = resp['status']
+    content       = get.request(source, "GET")[1].decode('utf-8')
+    csvfile       = io.StringIO(content)    # Stream content instead of saving
+    table         = csv.DictReader(csvfile)
+
+    return table
+
 
 def precise_distance(a_lat, a_lon, b_lat, b_lon):
     """
@@ -113,18 +132,13 @@ def best(many_locations):
 def run():
     """ Example application """
     output  = {}
-    working = os.getcwd()
-    with open(working + '/radar.csv', 'r') as csvfile:
-        radars = csv.DictReader(csvfile)
-        output['Radar'] = best(radars)
 
-    with open(working + '/metar.csv', 'r') as csvfile:
-        metars = csv.DictReader(csvfile)
-        output['Observation'] = best(metars)
-
-    with open(working + '/zone.csv', 'r') as csvfile:
-        zones = csv.DictReader(csvfile)
-        output['Zone'] = best(zones)
+    radars                = download('radar')
+    metars                = download('metar')
+    zones                 = download('zone')
+    output['Radar']       = best(radars)
+    output['Observation'] = best(metars)
+    output['Zone']        = best(zones)
 
     print(output)
 
