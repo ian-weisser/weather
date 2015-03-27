@@ -213,29 +213,48 @@ class Metar(dict):
         Parse the NWS METAR file
         Fields are defined at http://weather.noaa.gov/tg/site.shtml
         """
-        stations = self.locations.split('\r\n')[:-1]
+        stations = self.locations.split('\n')[:-1]
         for station in stations:
-            icao                       = station.split(';')[0].strip()
+            sta_line = station.split(';')
+            icao = sta_line[0] 
             if icao.upper() not in self.stations:
                 continue
 
-            self[icao]                 = {}
+            self[icao]                 = {}    
             self[icao]['Name']         = icao
-            #self[icao]['Block_Num']    = station.split(';')[1].strip()
-            #self[icao]['Station_Num']  = station.split(';')[2].strip()
-            self[icao]['Location']     = station.split(';')[3].strip()
-            #self[icao]['State']        = station.split(';')[4].strip()
-            #self[icao]['Country']      = station.split(';')[5].strip()
-            #self[icao]['WMO_Region']   = station.split(';')[6].strip()
-            self[icao]['Latitude']     = dms_to_dec(
-                                           station.split(';')[7].strip())
-            self[icao]['Longitude']    = dms_to_dec(
-                                           station.split(';')[8].strip())
+            del sta_line[0]
+                
+            #self[icao]['Block_Num']    = sta_line[0].strip()
+            del sta_line[0]
+
+            #self[icao]['Station_Num']  = sta_line[0].strip()
+            del sta_line[0]
+
+            self[icao]['Location']     = sta_line[0].strip()
+            del sta_line[0]
+
+            if len(sta_line[0]) in [0, 2, 24]:
+                #self[icao]['State']    = sta_line[0].strip()
+                del sta_line[0]
+
+            #self[icao]['Country']      = sta_line[0].strip()
+            del sta_line[0]
+
+            #self[icao]['WMO_Region']   = sta_line[0].strip()
+            del sta_line[0]
+
+            self[icao]['Latitude']     = dms_to_dec(sta_line[0].strip())
+            del sta_line[0]
+
+            self[icao]['Longitude']    = dms_to_dec(sta_line[0].strip())
+            del sta_line[0]
+
             #self[icao]['Upper_Lat']     = station.split(';')[9].strip()
             #self[icao]['Upper_Lon']     = station.split(';')[10].strip()
             #self[icao]['Elevation']     = station.split(';')[11].strip()
             #self[icao]['Upper_Elev']    = station.split(';')[12].strip()
             #self[icao]['RSBN']          = station.split(';')[13].strip()
+
 
     def csv(self):
         """ Output the dict as a CSV """
