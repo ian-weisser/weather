@@ -57,9 +57,11 @@ import httplib2      # (Debian package python3-httplib2)
 DIR    = os.path.expanduser('~') + '/uploads/data'
 CACHE  = '/tmp/weather'
 SOURCE = { 'Radar' : 'http://www.ncdc.noaa.gov/homr/file/nexrad-stations.txt',
-           'Metar' : 'http://weather.noaa.gov/data/nsd_cccc.txt',
-           'Zones' :
-               'http://www.nws.noaa.gov/geodata/catalog/wsom/html/cntyzone.htm'
+           'Metar' : {'Locations':'http://weather.noaa.gov/data/nsd_cccc.txt',
+                      'Stations' :'http://weather.noaa.gov/pub/data/' + 
+                                  'observations/metar/stations/' },
+           'Zones' : 'http://www.nws.noaa.gov/geodata/catalog/wsom/' + 
+                     'html/cntyzone.htm'
          }
 
 
@@ -180,25 +182,43 @@ class Metar(dict):
     def __init__(self):
         """ Create the dict, download and unzip the data """
         super(Metar, self).__init__()
-        self.content = ""
-        self.status  = 0
+        self.locations = ''
+        self.stations  = []
+        self.status    = 0
         self.download_nws()
+        self.list_of_stations()
 
     def download_nws(self):
         """ Download worldwide METARs from the NWS """
-        get           = httplib2.Http(CACHE)
-        resp, content = get.request(SOURCE['Metar'], "GET")
-        self.status   = resp['status']
-        self.content  = content.decode('utf-8')
+        get             = httplib2.Http(CACHE)
+        resp, content   = get.request(SOURCE['Metar']['Locations'], "GET")
+        self.status     = resp['status']
+        self.locations  = content.decode('utf-8')
+
+    def list_of_stations(self):
+        """ 
+        Create a simple list of observation station codes
+        not associated with any location. A data check.
+        """
+        get             = httplib2.Http(CACHE)
+        resp, content   = get.request(SOURCE['Metar']['Stations'], "GET")
+        html            = content.decode('utf-8').split('\n')
+        for line in html:
+            print(line)
+            if '<img src="/icons/text.gif" alt="[TXT]">' in line:
+                self.stations.append(line.split('"')[5][0:4])
 
     def parse(self):
         """
         Parse the NWS METAR file
         Fields are defined at http://weather.noaa.gov/tg/site.shtml
         """
-        stations = self.content.split('\r\n')[:-1]
+        stations = self.locations.split('\r\n')[:-1]
         for station in stations:
             icao                       = station.split(';')[0].strip()
+            if icao.upper() not in self.stations.upper():
+                continue
+
             self[icao]                 = {}
             self[icao]['Name']         = icao
             #self[icao]['Block_Num']    = station.split(';')[1].strip()
