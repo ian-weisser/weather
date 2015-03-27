@@ -55,12 +55,13 @@ import httplib2      # (Debian package python3-httplib2)
 
 
 DIR    = os.path.expanduser('~') + '/uploads/data'
+print(DIR)
 CACHE  = '/tmp/weather'
 SOURCE = { 'Radar' : 'http://www.ncdc.noaa.gov/homr/file/nexrad-stations.txt',
            'Metar' : {'Locations':'http://weather.noaa.gov/data/nsd_cccc.txt',
-                      'Stations' :'http://weather.noaa.gov/pub/data/' + 
+                      'Stations' :'http://weather.noaa.gov/pub/data/' +
                                   'observations/metar/stations/' },
-           'Zones' : 'http://www.nws.noaa.gov/geodata/catalog/wsom/' + 
+           'Zones' : 'http://www.nws.noaa.gov/geodata/catalog/wsom/' +
                      'html/cntyzone.htm'
          }
 
@@ -182,11 +183,23 @@ class Metar(dict):
     def __init__(self):
         """ Create the dict, download and unzip the data """
         super(Metar, self).__init__()
-        self.locations = ''
-        self.stations  = []
+        self.stations  = []         # Simple list of downloadable stations
+        self.list_of_stations()     # Populate the list. Data check
         self.status    = 0
+        self.locations = ''
         self.download_nws()
-        self.list_of_stations()
+
+    def list_of_stations(self):
+        """
+        Create a simple list of observation station codes
+        not associated with any location. A data check.
+        """
+        get     = httplib2.Http(CACHE)
+        content = get.request(SOURCE['Metar']['Stations'], "GET")[1]
+        html    = content.decode('utf-8').split('\n')
+        for line in html:
+            if '<img src="/icons/text.gif" alt="[TXT]">' in line:
+                self.stations.append(line.split('"')[5][0:4])
 
     def download_nws(self):
         """ Download worldwide METARs from the NWS """
@@ -194,19 +207,6 @@ class Metar(dict):
         resp, content   = get.request(SOURCE['Metar']['Locations'], "GET")
         self.status     = resp['status']
         self.locations  = content.decode('utf-8')
-
-    def list_of_stations(self):
-        """ 
-        Create a simple list of observation station codes
-        not associated with any location. A data check.
-        """
-        get             = httplib2.Http(CACHE)
-        resp, content   = get.request(SOURCE['Metar']['Stations'], "GET")
-        html            = content.decode('utf-8').split('\n')
-        for line in html:
-            print(line)
-            if '<img src="/icons/text.gif" alt="[TXT]">' in line:
-                self.stations.append(line.split('"')[5][0:4])
 
     def parse(self):
         """
@@ -216,7 +216,7 @@ class Metar(dict):
         stations = self.locations.split('\r\n')[:-1]
         for station in stations:
             icao                       = station.split(';')[0].strip()
-            if icao.upper() not in self.stations.upper():
+            if icao.upper() not in self.stations:
                 continue
 
             self[icao]                 = {}
